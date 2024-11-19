@@ -1,16 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TensorFlow.js Image Prediction</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script> <!-- Load TensorFlow.js -->
 </head>
-
 <body>
     <h1>TensorFlow.js Image Prediction</h1>
-
     <input type="file" id="imageUpload" accept="image/*" />
     <br><br>
     <canvas id="canvas" style="display:none;"></canvas>
@@ -23,6 +20,47 @@
     <pre id="predictedClass"></pre>
 
     <script>
+        // Define the custom CentralFocusSpatialAttention layer
+        class CentralFocusSpatialAttention extends tf.layers.Layer {
+            constructor(config) {
+                super(config);
+            }
+
+            build(inputShape) {
+                this.conv_attention = tf.layers.conv2d({ 
+                    filters: 1, 
+                    kernelSize: 7, 
+                    padding: 'same', 
+                    activation: 'sigmoid' 
+                });
+                this.gamma = this.addWeight('gamma', [], 'zeros', true);
+            }
+
+            call(input) {
+                const avg_pool = tf.mean(input, -1, true);
+                const max_pool = tf.max(input, -1, true);
+                const attention = this.conv_attention.apply(tf.concat([avg_pool, max_pool], -1));
+
+                const height = input.shape[1];
+                const width = input.shape[2];
+                const center_x = Math.floor(height / 2);
+                const center_y = Math.floor(width / 2);
+                const sigma = height / 4;
+                
+                const x = tf.range(0, height, 'float32');
+                const y = tf.range(0, width, 'float32');
+                const x_mask = tf.exp(tf.neg(tf.square(x - center_x)).div(tf.scalar(2 * sigma * sigma)));
+                const y_mask = tf.exp(tf.neg(tf.square(y - center_y)).div(tf.scalar(2 * sigma * sigma)));
+                const gaussian_mask = tf.matMul(x_mask.expandDims(1), y_mask.expandDims(0));
+
+                const weighted_attention = tf.mul(attention, gaussian_mask);
+                return tf.mul(input, tf.add(tf.scalar(1), tf.mul(this.gamma, weighted_attention)));
+            }
+        }
+
+        // Register the custom layer in TensorFlow.js
+        tf.serialization.registerClass(CentralFocusSpatialAttention);
+
         let model;
         let modelLoaded = false;
 
@@ -104,5 +142,4 @@
         }
     </script>
 </body>
-
 </html>
