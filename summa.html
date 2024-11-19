@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TensorFlow.js Image Prediction</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script> <!-- Load TensorFlow.js -->
+</head>
+
+<body>
+    <h1>TensorFlow.js Image Prediction</h1>
+
+    <input type="file" id="imageUpload" accept="image/*" />
+    <br><br>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <img id="image" style="max-width: 300px;" />
+    <br>
+    <button id="predictButton" onclick="predictImage()" disabled>Predict Image</button>
+    <h3>Prediction Scores:</h3>
+    <pre id="predictionOutput"></pre>
+    <h3>Predicted Class:</h3>
+    <pre id="predictedClass"></pre>
+
+    <script>
+        let model;
+        let modelLoaded = false;
+
+        // Load the model
+        async function loadModel() {
+            try {
+                model = await tf.loadLayersModel('D:/Telegram Desktop/Webpage/Tensorflowjs Model/summa.html'); // Replace with the path to your model
+                modelLoaded = true;
+                console.log('Model loaded!');
+                
+                // Enable the predict button once the model is loaded
+                document.getElementById('predictButton').disabled = false;
+            } catch (error) {
+                console.error('Error loading the model:', error);
+                alert('Failed to load the model. Please check the model path.');
+            }
+        }
+
+        // Load model when the page loads
+        window.onload = () => {
+            loadModel(); // Load the model when the page is ready
+        };
+
+        // Function to handle image upload and display the image
+        document.getElementById('imageUpload').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const imgElement = document.getElementById('image');
+                    imgElement.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Preprocess the image before prediction
+        async function preprocessImage(imageElement) {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = imageElement.width;
+            canvas.height = imageElement.height;
+            ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+
+            const imageTensor = tf.browser.fromPixels(canvas);
+
+            // Resize and normalize the image for the model (adjust this based on your model's input)
+            const resizedImage = tf.image.resizeBilinear(imageTensor, [224, 224]); // Resize image to 224x224
+            const normalizedImage = resizedImage.div(255.0); // Normalize image if the model requires it
+
+            return normalizedImage.expandDims(0); // Add batch dimension
+        }
+
+        // Function to predict the class of the uploaded image
+        async function predictImage() {
+            if (!modelLoaded) {
+                alert('Model is not loaded yet!');
+                return;
+            }
+
+            const imageElement = document.getElementById('image');
+            const processedImage = await preprocessImage(imageElement);
+
+            // Predict the class scores
+            const predictions = await model.predict(processedImage);
+            const scores = predictions.dataSync(); // Get prediction scores
+
+            // Output the prediction scores
+            const output = document.getElementById('predictionOutput');
+            output.textContent = JSON.stringify(scores, null, 2);
+
+            // Get the predicted class (argmax of the scores)
+            const predictedClass = predictions.argMax(-1).dataSync()[0];
+            const predictedClassElement = document.getElementById('predictedClass');
+            predictedClassElement.textContent = `Predicted Class: ${predictedClass}`;
+
+            // Clean up tensors to avoid memory leaks
+            predictions.dispose();
+        }
+    </script>
+</body>
+
+</html>
